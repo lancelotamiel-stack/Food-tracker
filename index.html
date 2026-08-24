@@ -3,11 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#11191f">
+  <meta name="theme-color" content="#f4f7f5" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0b100d" media="(prefers-color-scheme: dark)">
+  <meta name="description" content="Inventaire de cuisine : scannez, suivez les dates de péremption et ce qu'il reste.">
   <title>Inventaire cuisine</title>
 
-  <!-- Pico.css : feuille de style de base, version figée -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.0.6/css/pico.min.css">
+  <!-- Inter : police de l'interface. Si le réseau manque, la pile système prend le relais. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+
   <link rel="stylesheet" href="./css/style.css">
 
   <!--
@@ -23,170 +28,455 @@
   <script defer src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 </head>
 
-<body x-data="inventaire">
+<body x-data="inventaire" @scroll.window="defile = window.scrollY > 4">
 
-<main class="container" x-cloak>
+<!-- ===================== EN-TÊTE ===================== -->
+<header class="topbar" :class="defile && 'defile'" x-cloak>
+  <div class="topbar-inner">
 
-  <!-- ===================== ÉCRAN 1 : DASHBOARD ===================== -->
+    <!-- Sur les écrans internes, le logo laisse la place au retour arrière. -->
+    <button class="btn-icone" x-show="ecran !== 'dashboard'"
+            @click="ecran === 'scan' ? fermerScan() : annulerFormulaire()"
+            aria-label="Retour au tableau de bord">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M19 12H5M12 19l-7-7 7-7"/>
+      </svg>
+    </button>
+
+    <div class="marque">
+      <span class="logo" x-show="ecran === 'dashboard'" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 8h16l-1.2 11a2 2 0 0 1-2 1.8H7.2a2 2 0 0 1-2-1.8L4 8Z"/>
+          <path d="M8.5 8a3.5 3.5 0 0 1 7 0"/>
+          <path d="M9 13.5l2 2 4-4"/>
+        </svg>
+      </span>
+      <span class="marque-texte">
+        <strong x-text="ecran === 'dashboard' ? 'Inventaire' : (ecran === 'scan' ? 'Scanner' : 'Nouveau produit')"></strong>
+        <span x-show="ecran === 'dashboard'"
+              x-text="produits.length + ' produit(s) · ' + nombreCategories + ' catégorie(s)'"></span>
+        <span x-show="ecran === 'scan'">Code-barres · Open Food Facts</span>
+        <span x-show="ecran === 'formulaire'" x-text="form.code ? 'Code ' + form.code : 'Sans code-barres'"></span>
+      </span>
+    </div>
+
+    <button class="btn-icone" @click="basculerTheme()"
+            :aria-label="'Thème : ' + theme + '. Changer.'">
+      <!-- auto -->
+      <svg x-show="theme === 'auto'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9"/><path d="M12 3v18"/><path d="M12 3a9 9 0 0 1 0 18" fill="currentColor" stroke="none"/>
+      </svg>
+      <!-- clair -->
+      <svg x-show="theme === 'clair'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="4"/>
+        <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>
+      </svg>
+      <!-- sombre -->
+      <svg x-show="theme === 'sombre'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/>
+      </svg>
+    </button>
+
+  </div>
+</header>
+
+<main class="enveloppe" x-cloak>
+
+  <!-- ===================== ÉCRAN 1 : TABLEAU DE BORD ===================== -->
   <section x-show="ecran === 'dashboard'">
 
-    <hgroup>
-      <h1>Inventaire</h1>
-      <p x-text="produits.length + ' produit(s) en stock'"></p>
-    </hgroup>
+    <!-- Quatre indicateurs, qui servent aussi de filtres. -->
+    <div class="stats">
+      <template x-for="tuile in tuiles" :key="tuile.cle">
+        <button class="stat" :class="'stat-' + tuile.teinte"
+                :aria-pressed="filtre === tuile.cle"
+                @click="activerFiltre(tuile.cle)">
+          <span class="stat-haut">
+            <span class="stat-pastille"></span>
+            <span class="stat-libelle" x-text="tuile.libelle"></span>
+          </span>
+          <span class="stat-valeur" x-text="tuile.valeur"></span>
+          <span class="stat-detail"
+                x-text="tuile.cle === 'tous' ? nombreCategories + ' catégorie(s)' : tuile.detail"></span>
+        </button>
+      </template>
+    </div>
 
-    <!-- Bandeau : ce qui périme dans les 7 jours -->
-    <article class="bandeau-alerte" x-show="alertes.length > 0">
-      <strong x-text="'À consommer sous 7 jours — ' + alertes.length + ' produit(s)'"></strong>
-      <ul>
+    <!-- Bandeau : ce qui périme dans les 7 jours. Masqué dès qu'on filtre,
+         pour ne pas afficher deux listes concurrentes. -->
+    <section class="alerte anim" x-show="alertes.length > 0 && !vueFiltree">
+      <h2 class="alerte-titre">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/>
+          <path d="M12 9v4M12 17h.01"/>
+        </svg>
+        <span x-text="'À consommer rapidement — ' + alertes.length + ' produit(s)'"></span>
+      </h2>
+      <div class="alerte-liste">
         <template x-for="p in alertes" :key="'alerte-' + p.id">
-          <li>
-            <span x-text="p.nom"></span>
-            <em x-text="' — ' + echeance(p)"></em>
-          </li>
+          <span class="alerte-item">
+            <strong x-text="p.nom"></strong>
+            <em x-text="echeance(p)"></em>
+          </span>
         </template>
-      </ul>
-    </article>
+      </div>
+    </section>
 
-    <p x-show="produits.length === 0" class="vide">
-      Inventaire vide. Scannez un code-barres, ou ajoutez un produit à la main.
-    </p>
+    <!-- Recherche + rappel du filtre actif -->
+    <div class="outils" x-show="produits.length > 0">
+      <div class="recherche">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
+        </svg>
+        <input type="search" x-model="recherche" placeholder="Rechercher un produit, une marque…"
+               aria-label="Rechercher dans l'inventaire">
+        <button class="btn-icone effacer" x-show="recherche !== ''" @click="recherche = ''"
+                aria-label="Effacer la recherche">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 6 6 18M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
 
-    <!-- Un bloc par catégorie -->
+      <div class="filtres" x-show="vueFiltree">
+        <button class="puce" aria-pressed="true" @click="reinitialiserVue()">
+          <span x-text="'Filtre : ' + libelleFiltre + (recherche.trim() ? ' + recherche' : '')"></span>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 6 6 18M6 6l12 12"/>
+          </svg>
+        </button>
+        <span class="puce" style="pointer-events:none"
+              x-text="produitsVisibles.length + ' résultat(s)'"></span>
+      </div>
+    </div>
+
+    <!-- Inventaire vide : premier lancement -->
+    <div class="vide anim" x-show="produits.length === 0">
+      <div class="vide-illustration">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 8h16l-1.2 11a2 2 0 0 1-2 1.8H7.2a2 2 0 0 1-2-1.8L4 8Z"/>
+          <path d="M8.5 8a3.5 3.5 0 0 1 7 0"/>
+        </svg>
+      </div>
+      <h3>Votre inventaire est vide</h3>
+      <p>Scannez le code-barres d'un produit : sa fiche et une date de péremption estimée sont remplies automatiquement.</p>
+    </div>
+
+    <!-- Filtre ou recherche sans résultat -->
+    <div class="vide anim" x-show="produits.length > 0 && groupes.length === 0">
+      <div class="vide-illustration">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
+        </svg>
+      </div>
+      <h3>Aucun produit ne correspond</h3>
+      <p>Changez de filtre ou effacez la recherche pour revoir tout l'inventaire.</p>
+      <p style="margin-top:1rem"><button class="btn btn-discret" @click="reinitialiserVue()">Tout afficher</button></p>
+    </div>
+
+    <!-- Un bloc par catégorie, repliable -->
     <template x-for="groupe in groupes" :key="groupe.nom">
       <section class="groupe">
-        <h3 x-text="groupe.nom"></h3>
 
-        <template x-for="p in groupe.produits" :key="p.id">
-          <!-- `apercu` : valeur affichée pendant qu'on fait glisser le curseur -->
-          <article class="produit" :class="'etat-' + urgence(p)" x-data="{ apercu: null }">
+        <button class="groupe-entete" :aria-expanded="!estReplie(groupe.nom)"
+                @click="basculerGroupe(groupe.nom)">
+          <span class="groupe-icone" aria-hidden="true" x-text="groupe.icone"></span>
+          <span class="groupe-nom" x-text="groupe.nom"></span>
+          <span class="groupe-compte" x-text="groupe.produits.length"></span>
+          <svg class="groupe-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m6 9 6 6 6-6"/>
+          </svg>
+        </button>
 
-            <div class="entete">
-              <img class="vignette" x-show="p.image" :src="p.image" :alt="p.nom" loading="lazy">
-              <div class="titre">
-                <strong x-text="p.nom"></strong>
-                <small>
-                  <span x-show="p.marque" x-text="p.marque"></span>
-                  <span x-show="p.marque && p.quantite"> · </span>
-                  <span x-show="p.quantite" x-text="p.quantite"></span>
-                </small>
-                <small class="echeance" x-text="echeance(p)"></small>
+        <div class="groupe-corps" x-show="!estReplie(groupe.nom)">
+          <template x-for="p in groupe.produits" :key="p.id">
+            <!-- `apercu` : valeur affichée pendant qu'on fait glisser le curseur -->
+            <article class="produit" :class="'etat-' + urgence(p)" x-data="{ apercu: null }">
+
+              <div class="produit-haut">
+                <img class="vignette" x-show="p.image" :src="p.image" :alt="p.nom" loading="lazy">
+                <div class="vignette vignette-repli" x-show="!p.image" aria-hidden="true"
+                     x-text="groupe.icone"></div>
+
+                <div class="produit-titre">
+                  <strong class="produit-nom" x-text="p.nom"></strong>
+                  <small class="produit-meta">
+                    <span x-show="p.marque" x-text="p.marque"></span>
+                    <span x-show="p.marque && p.quantite"> · </span>
+                    <span x-show="p.quantite" x-text="p.quantite"></span>
+                    <span x-show="!p.marque && !p.quantite" x-text="groupe.nom"></span>
+                  </small>
+                  <span class="badge">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
+                    </svg>
+                    <span x-text="echeance(p)"></span>
+                  </span>
+                </div>
+
+                <button class="btn-icone" @click="supprimer(p)" :aria-label="'Supprimer ' + p.nom">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/>
+                  </svg>
+                </button>
               </div>
-              <button class="supprimer outline secondary"
-                      @click="supprimer(p)"
-                      :aria-label="'Supprimer ' + p.nom">✕</button>
-            </div>
 
-            <!-- Date corrigeable directement, en un tap -->
-            <input type="date"
-                   :value="p.peremption"
-                   @change="changerDate(p, $event.target.value)"
-                   :aria-label="'Date de péremption de ' + p.nom">
+              <div class="produit-bas">
+                <!-- Date corrigeable en un tap : le champ natif couvre la pastille. -->
+                <label class="date-puce">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>
+                  </svg>
+                  <span x-text="dateCourte(p.peremption)"></span>
+                  <input type="date" :value="p.peremption"
+                         @change="changerDate(p, $event.target.value)"
+                         :aria-label="'Date de péremption de ' + p.nom">
+                </label>
 
-            <!-- Niveau restant : l'historique n'est écrit qu'au relâchement -->
-            <div class="niveau">
-              <input type="range" min="0" max="100" step="5"
-                     :value="p.niveau"
-                     @input="apercu = Number($event.target.value)"
-                     @change="apercu = null; changerNiveau(p, Number($event.target.value))"
-                     :aria-label="'Niveau restant de ' + p.nom">
-              <output x-text="(apercu === null ? p.niveau : apercu) + ' %'"></output>
-            </div>
+                <!-- Niveau restant : l'historique n'est écrit qu'au relâchement -->
+                <div class="niveau"
+                     :class="(apercu === null ? p.niveau : apercu) <= 25 && 'niveau-bas'"
+                     :style="'--remplissage: ' + (apercu === null ? p.niveau : apercu) + '%'">
+                  <input type="range" min="0" max="100" step="5"
+                         :value="p.niveau"
+                         @input="apercu = Number($event.target.value)"
+                         @change="apercu = null; changerNiveau(p, Number($event.target.value))"
+                         :aria-label="'Niveau restant de ' + p.nom">
+                  <span class="niveau-valeur" x-text="(apercu === null ? p.niveau : apercu) + ' %'"></span>
+                </div>
+              </div>
 
-          </article>
-        </template>
+            </article>
+          </template>
+        </div>
+
       </section>
     </template>
-
-    <!-- Sauvegarde JSON -->
-    <details class="sauvegarde">
-      <summary>Sauvegarde</summary>
-      <p><small>Le fichier JSON contient l'inventaire et l'historique. C'est la seule sauvegarde.</small></p>
-      <div class="deux-boutons">
-        <button @click="exporterJSON()">Exporter</button>
-        <button class="secondary" @click="$refs.fichier.click()">Importer</button>
-      </div>
-      <input type="file" accept="application/json,.json" x-ref="fichier"
-             @change="importerJSON($event)" hidden>
-    </details>
 
   </section>
 
   <!-- ===================== ÉCRAN 2 : SCAN ===================== -->
-  <section x-show="ecran === 'scan'">
-    <h2>Scanner</h2>
+  <section x-show="ecran === 'scan'" class="anim">
 
-    <div id="lecteur"></div>
-    <p class="message" x-text="messageScan"></p>
+    <div class="scan-cadre">
+      <div id="lecteur"></div>
+      <div class="scan-mire" x-show="scanActif" aria-hidden="true">
+        <span></span><span></span><span></span><span></span>
+        <div class="scan-ligne"></div>
+      </div>
+    </div>
+
+    <p class="scan-message" x-text="messageScan"></p>
+
+    <div class="separateur">ou</div>
 
     <!-- Solution de repli : code illisible, ou pas de caméra (test sur PC) -->
-    <form @submit.prevent="traiterCode(codeManuel)">
-      <label>
-        Saisir le code à la main
-        <input type="text" inputmode="numeric" autocomplete="off"
-               x-model="codeManuel" placeholder="3017620422003">
-      </label>
-      <button type="submit">Chercher ce code</button>
-    </form>
+    <div class="carte">
+      <form @submit.prevent="traiterCode(codeManuel)">
+        <label class="champ">
+          <span>Saisir le code-barres à la main</span>
+          <input type="text" inputmode="numeric" autocomplete="off"
+                 x-model="codeManuel" placeholder="3017620422003">
+        </label>
+        <button type="submit" class="btn btn-primaire btn-large">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
+          </svg>
+          Chercher ce code
+        </button>
+      </form>
+    </div>
 
-    <button class="secondary" @click="fermerScan()">Annuler</button>
+    <button class="btn btn-discret btn-large" @click="fermerScan()">Annuler</button>
+
   </section>
 
   <!-- ===================== ÉCRAN 3 : FORMULAIRE ===================== -->
-  <section x-show="ecran === 'formulaire'">
-    <h2 x-text="form.code ? 'Ajouter le produit scanné' : 'Ajouter un produit'"></h2>
-    <p class="message" x-text="form.source"></p>
+  <section x-show="ecran === 'formulaire'" class="anim">
 
-    <img class="vignette-grande" x-show="form.image" :src="form.image" alt="">
+    <div class="entete-ecran">
+      <h2 x-text="form.code ? 'Produit scanné' : 'Ajout manuel'"></h2>
+    </div>
 
-    <form @submit.prevent="validerFormulaire()">
-      <label>
-        Nom
-        <input type="text" x-model="form.nom" required placeholder="Pâtes complètes">
-      </label>
+    <p class="bandeau-source" x-show="form.source">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/>
+      </svg>
+      <span x-text="form.source"></span>
+    </p>
 
-      <label>
-        Marque
-        <input type="text" x-model="form.marque" placeholder="facultatif">
-      </label>
+    <div class="carte">
 
-      <label>
-        Quantité d'origine
-        <input type="text" x-model="form.quantite" placeholder="1 kg, 6 œufs, 50 cl…">
-      </label>
-
-      <label>
-        Catégorie
-        <input type="text" x-model="form.categorie" placeholder="Fruits, Conserves…">
-      </label>
-
-      <label>
-        Date de péremption
-        <input type="date" x-model="form.peremption" required>
-      </label>
-      <small x-text="form.explication"></small>
-
-      <div class="raccourcis">
-        <button type="button" class="outline secondary" @click="decalerPeremption(-7)">−1 sem.</button>
-        <button type="button" class="outline secondary" @click="decalerPeremption(7)">+1 sem.</button>
-        <button type="button" class="outline secondary" @click="decalerPeremption(30)">+1 mois</button>
-        <button type="button" class="outline secondary" @click="decalerPeremption(365)">+1 an</button>
+      <div class="apercu-produit" x-show="form.image">
+        <img :src="form.image" alt="">
+        <div>
+          <strong x-text="form.nom || 'Produit sans nom'"></strong><br>
+          <code x-show="form.code" x-text="form.code"></code>
+        </div>
       </div>
 
-      <div class="deux-boutons">
-        <button type="submit">Ajouter</button>
-        <button type="button" class="secondary" @click="annulerFormulaire()">Annuler</button>
-      </div>
-    </form>
+      <form @submit.prevent="validerFormulaire()">
+        <label class="champ">
+          <span>Nom du produit *</span>
+          <input type="text" x-model="form.nom" required placeholder="Pâtes complètes">
+        </label>
+
+        <label class="champ">
+          <span>Marque</span>
+          <input type="text" x-model="form.marque" placeholder="facultatif">
+        </label>
+
+        <label class="champ">
+          <span>Quantité d'origine</span>
+          <input type="text" x-model="form.quantite" placeholder="1 kg, 6 œufs, 50 cl…">
+        </label>
+
+        <label class="champ">
+          <span>Catégorie</span>
+          <input type="text" x-model="form.categorie" list="liste-categories" placeholder="Fruits, Conserves…">
+        </label>
+        <datalist id="liste-categories">
+          <template x-for="nom in categoriesConnues" :key="nom">
+            <option :value="nom"></option>
+          </template>
+        </datalist>
+
+        <label class="champ">
+          <span>Date de péremption *</span>
+          <input type="date" x-model="form.peremption" required>
+        </label>
+        <p class="aide">
+          <span x-text="form.explication"></span>
+          <strong x-show="form.peremption" x-text="' (' + apercuEcheanceForm + ')'"></strong>
+        </p>
+
+        <div class="raccourcis">
+          <button type="button" class="btn" @click="decalerPeremption(-7)">−1 sem.</button>
+          <button type="button" class="btn" @click="decalerPeremption(7)">+1 sem.</button>
+          <button type="button" class="btn" @click="decalerPeremption(30)">+1 mois</button>
+          <button type="button" class="btn" @click="decalerPeremption(365)">+1 an</button>
+        </div>
+
+        <div class="duo">
+          <button type="submit" class="btn btn-primaire" style="flex:1.4">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+            Ajouter
+          </button>
+          <button type="button" class="btn btn-discret" @click="annulerFormulaire()">Annuler</button>
+        </div>
+      </form>
+
+    </div>
   </section>
 
 </main>
 
-<!-- Barre d'action fixe en bas : atteignable au pouce, d'une seule main -->
-<nav class="barre-bas" x-show="ecran === 'dashboard'" x-cloak>
-  <button @click="ouvrirScan()">Scanner</button>
-  <button class="secondary" @click="ouvrirFormulaireManuel()">Ajout manuel</button>
+<!-- ===================== BARRE D'ACTION FIXE =====================
+     Atteignable au pouce, d'une seule main. -->
+<nav class="dock" x-show="ecran === 'dashboard'" x-cloak>
+  <div class="dock-inner">
+    <button class="btn btn-discret" @click="ouvrirFormulaireManuel()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 5v14M5 12h14"/>
+      </svg>
+      Ajouter
+    </button>
+
+    <button class="btn btn-primaire" @click="ouvrirScan()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2"/>
+        <path d="M8 8v8M11 8v8M14 8v8M17 8v8"/>
+      </svg>
+      Scanner
+    </button>
+
+    <button class="btn-icone" @click="panneau = 'sauvegarde'" aria-label="Sauvegarde">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 4h11l3 3v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"/>
+        <path d="M8 4v5h7M8 15h8"/>
+      </svg>
+    </button>
+  </div>
 </nav>
+
+<!-- ===================== FEUILLE : SAUVEGARDE ===================== -->
+<template x-if="panneau === 'sauvegarde'">
+  <div>
+    <div class="voile" @click="panneau = null" x-transition.opacity></div>
+    <div class="feuille anim" role="dialog" aria-label="Sauvegarde">
+      <div class="feuille-inner">
+        <div class="feuille-poignee"></div>
+        <h2>Sauvegarde</h2>
+        <p class="aide" style="margin:0 0 1rem">
+          Le fichier JSON contient l'inventaire et l'historique. C'est la seule sauvegarde :
+          vider les données du navigateur efface tout.
+        </p>
+
+        <div class="stats" style="margin-top:0">
+          <div class="stat stat-total">
+            <span class="stat-libelle">Produits</span>
+            <span class="stat-valeur" x-text="produits.length"></span>
+          </div>
+          <div class="stat">
+            <span class="stat-libelle">Mouvements</span>
+            <span class="stat-valeur" x-text="historique.length"></span>
+          </div>
+        </div>
+
+        <div class="duo" style="margin-top:1rem">
+          <button class="btn btn-primaire" @click="exporterJSON()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3v12M8 11l4 4 4-4M4 20h16"/>
+            </svg>
+            Exporter
+          </button>
+          <button class="btn" @click="$refs.fichier.click()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 17V5M8 9l4-4 4 4M4 20h16"/>
+            </svg>
+            Importer
+          </button>
+        </div>
+        <input type="file" accept="application/json,.json" x-ref="fichier"
+               @change="importerJSON($event)" hidden>
+
+        <button class="btn btn-discret btn-large" style="margin-top:.6rem" @click="panneau = null">Fermer</button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<!-- ===================== DIALOGUE DE CONFIRMATION ===================== -->
+<template x-if="dialogue">
+  <div>
+    <div class="voile" @click="repondreDialogue(false)" x-transition.opacity></div>
+    <div class="dialogue anim" role="alertdialog" aria-modal="true">
+      <h3 x-text="dialogue.titre"></h3>
+      <p x-text="dialogue.texte"></p>
+      <div class="duo" style="margin-top:1.1rem">
+        <button class="btn btn-discret" @click="repondreDialogue(false)">Annuler</button>
+        <button class="btn btn-danger" @click="repondreDialogue(true)" x-text="dialogue.libelleAction"></button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<!-- ===================== NOTIFICATIONS ===================== -->
+<div class="notifs" aria-live="polite" x-cloak>
+  <template x-for="n in notifs" :key="n.id">
+    <div class="notif anim" :class="'notif-' + n.type">
+      <svg x-show="n.type === 'succes'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/>
+      </svg>
+      <svg x-show="n.type !== 'succes'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/>
+      </svg>
+      <span x-text="n.texte"></span>
+    </div>
+  </template>
+</div>
 
 </body>
 </html>

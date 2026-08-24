@@ -11,6 +11,7 @@ export const CLES = {
   historique: PREFIXE + "historique",   // tableau des changements de niveau
   cache: PREFIXE + "cacheProduits",     // fiches Open Food Facts, indexées par code-barres
   identifiant: PREFIXE + "uuidApp",     // identifiant anonyme envoyé à Open Food Facts
+  theme: PREFIXE + "theme",             // "auto", "clair" ou "sombre"
 };
 
 // Lecture tolérante : si la clé est absente ou le JSON corrompu, on renvoie
