@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#11191f">
+  <title>Inventaire cuisine</title>
+
+  <!-- Pico.css : feuille de style de base, version figée -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.0.6/css/pico.min.css">
+  <link rel="stylesheet" href="./css/style.css">
+
+  <!--
+    Ordre des scripts important :
+    1. app.js (module) s'abonne à l'événement "alpine:init"
+    2. Alpine se charge ensuite et déclenche cet événement
+    Les deux sont différés et s'exécutent dans l'ordre du document.
+  -->
+  <script type="module" src="./js/app.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+
+  <!-- html5-qrcode n'est pas un module ES : il expose window.Html5Qrcode -->
+  <script defer src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+</head>
+
+<body x-data="inventaire">
+
+<main class="container" x-cloak>
+
+  <!-- ===================== ÉCRAN 1 : DASHBOARD ===================== -->
+  <section x-show="ecran === 'dashboard'">
+
+    <hgroup>
+      <h1>Inventaire</h1>
+      <p x-text="produits.length + ' produit(s) en stock'"></p>
+    </hgroup>
+
+    <!-- Bandeau : ce qui périme dans les 7 jours -->
+    <article class="bandeau-alerte" x-show="alertes.length > 0">
+      <strong x-text="'À consommer sous 7 jours — ' + alertes.length + ' produit(s)'"></strong>
+      <ul>
+        <template x-for="p in alertes" :key="'alerte-' + p.id">
+          <li>
+            <span x-text="p.nom"></span>
+            <em x-text="' — ' + echeance(p)"></em>
+          </li>
+        </template>
+      </ul>
+    </article>
+
+    <p x-show="produits.length === 0" class="vide">
+      Inventaire vide. Scannez un code-barres, ou ajoutez un produit à la main.
+    </p>
+
+    <!-- Un bloc par catégorie -->
+    <template x-for="groupe in groupes" :key="groupe.nom">
+      <section class="groupe">
+        <h3 x-text="groupe.nom"></h3>
+
+        <template x-for="p in groupe.produits" :key="p.id">
+          <!-- `apercu` : valeur affichée pendant qu'on fait glisser le curseur -->
+          <article class="produit" :class="'etat-' + urgence(p)" x-data="{ apercu: null }">
+
+            <div class="entete">
+              <img class="vignette" x-show="p.image" :src="p.image" :alt="p.nom" loading="lazy">
+              <div class="titre">
+                <strong x-text="p.nom"></strong>
+                <small>
+                  <span x-show="p.marque" x-text="p.marque"></span>
+                  <span x-show="p.marque && p.quantite"> · </span>
+                  <span x-show="p.quantite" x-text="p.quantite"></span>
+                </small>
+                <small class="echeance" x-text="echeance(p)"></small>
+              </div>
+              <button class="supprimer outline secondary"
+                      @click="supprimer(p)"
+                      :aria-label="'Supprimer ' + p.nom">✕</button>
+            </div>
+
+            <!-- Date corrigeable directement, en un tap -->
+            <input type="date"
+                   :value="p.peremption"
+                   @change="changerDate(p, $event.target.value)"
+                   :aria-label="'Date de péremption de ' + p.nom">
+
+            <!-- Niveau restant : l'historique n'est écrit qu'au relâchement -->
+            <div class="niveau">
+              <input type="range" min="0" max="100" step="5"
+                     :value="p.niveau"
+                     @input="apercu = Number($event.target.value)"
+                     @change="apercu = null; changerNiveau(p, Number($event.target.value))"
+                     :aria-label="'Niveau restant de ' + p.nom">
+              <output x-text="(apercu === null ? p.niveau : apercu) + ' %'"></output>
+            </div>
+
+          </article>
+        </template>
+      </section>
+    </template>
+
+    <!-- Sauvegarde JSON -->
+    <details class="sauvegarde">
+      <summary>Sauvegarde</summary>
+      <p><small>Le fichier JSON contient l'inventaire et l'historique. C'est la seule sauvegarde.</small></p>
+      <div class="deux-boutons">
+        <button @click="exporterJSON()">Exporter</button>
+        <button class="secondary" @click="$refs.fichier.click()">Importer</button>
+      </div>
+      <input type="file" accept="application/json,.json" x-ref="fichier"
+             @change="importerJSON($event)" hidden>
+    </details>
+
+  </section>
+
+  <!-- ===================== ÉCRAN 2 : SCAN ===================== -->
+  <section x-show="ecran === 'scan'">
+    <h2>Scanner</h2>
+
+    <div id="lecteur"></div>
+    <p class="message" x-text="messageScan"></p>
+
+    <!-- Solution de repli : code illisible, ou pas de caméra (test sur PC) -->
+    <form @submit.prevent="traiterCode(codeManuel)">
+      <label>
+        Saisir le code à la main
+        <input type="text" inputmode="numeric" autocomplete="off"
+               x-model="codeManuel" placeholder="3017620422003">
+      </label>
+      <button type="submit">Chercher ce code</button>
+    </form>
+
+    <button class="secondary" @click="fermerScan()">Annuler</button>
+  </section>
+
+  <!-- ===================== ÉCRAN 3 : FORMULAIRE ===================== -->
+  <section x-show="ecran === 'formulaire'">
+    <h2 x-text="form.code ? 'Ajouter le produit scanné' : 'Ajouter un produit'"></h2>
+    <p class="message" x-text="form.source"></p>
+
+    <img class="vignette-grande" x-show="form.image" :src="form.image" alt="">
+
+    <form @submit.prevent="validerFormulaire()">
+      <label>
+        Nom
+        <input type="text" x-model="form.nom" required placeholder="Pâtes complètes">
+      </label>
+
+      <label>
+        Marque
+        <input type="text" x-model="form.marque" placeholder="facultatif">
+      </label>
+
+      <label>
+        Quantité d'origine
+        <input type="text" x-model="form.quantite" placeholder="1 kg, 6 œufs, 50 cl…">
+      </label>
+
+      <label>
+        Catégorie
+        <input type="text" x-model="form.categorie" placeholder="Fruits, Conserves…">
+      </label>
+
+      <label>
+        Date de péremption
+        <input type="date" x-model="form.peremption" required>
+      </label>
+      <small x-text="form.explication"></small>
+
+      <div class="raccourcis">
+        <button type="button" class="outline secondary" @click="decalerPeremption(-7)">−1 sem.</button>
+        <button type="button" class="outline secondary" @click="decalerPeremption(7)">+1 sem.</button>
+        <button type="button" class="outline secondary" @click="decalerPeremption(30)">+1 mois</button>
+        <button type="button" class="outline secondary" @click="decalerPeremption(365)">+1 an</button>
+      </div>
+
+      <div class="deux-boutons">
+        <button type="submit">Ajouter</button>
+        <button type="button" class="secondary" @click="annulerFormulaire()">Annuler</button>
+      </div>
+    </form>
+  </section>
+
+</main>
+
+<!-- Barre d'action fixe en bas : atteignable au pouce, d'une seule main -->
+<nav class="barre-bas" x-show="ecran === 'dashboard'" x-cloak>
+  <button @click="ouvrirScan()">Scanner</button>
+  <button class="secondary" @click="ouvrirFormulaireManuel()">Ajout manuel</button>
+</nav>
+
+</body>
+</html>

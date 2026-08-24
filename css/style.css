@@ -1,0 +1,165 @@
+/* ---------------------------------------------------------------------------
+   Complément à Pico.css. Mobile d'abord : cibles tactiles larges, actions
+   principales en bas de l'écran (zone du pouce).
+   Les variables --pico-* viennent de Pico et s'adaptent au thème clair/sombre.
+   --------------------------------------------------------------------------- */
+
+/* Masque les éléments Alpine tant que le composant n'est pas initialisé,
+   sinon les templates bruts clignotent au chargement. */
+[x-cloak] { display: none !important; }
+
+body {
+  /* Place pour la barre d'action fixe, encoche du téléphone comprise. */
+  padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+}
+
+.container {
+  padding-inline: 0.75rem;
+  max-width: 40rem;
+}
+
+h1 { font-size: 1.6rem; }
+h2 { font-size: 1.4rem; }
+h3 { font-size: 1.05rem; margin-bottom: 0.5rem; text-transform: uppercase;
+     letter-spacing: 0.04em; color: var(--pico-muted-color); }
+
+/* --- Bandeau des péremptions proches -------------------------------------- */
+
+.bandeau-alerte {
+  background: rgba(255, 152, 0, 0.16);
+  border-left: 6px solid #ff9800;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+.bandeau-alerte ul { margin: 0.5rem 0 0; padding-left: 1.1rem; }
+.bandeau-alerte li { margin-bottom: 0.15rem; }
+.bandeau-alerte em { color: var(--pico-muted-color); font-style: normal; }
+
+.vide { color: var(--pico-muted-color); }
+
+/* --- Carte produit --------------------------------------------------------- */
+
+.groupe { margin-bottom: 1.5rem; }
+
+.produit {
+  padding: 0.75rem;
+  margin-bottom: 0.6rem;
+  border-left: 6px solid var(--bord);
+  background: var(--fond);
+}
+
+/* Les 4 états de péremption. Couleurs semi-transparentes : elles restent
+   lisibles en thème clair comme en thème sombre. */
+.etat-perime { --fond: rgba(220, 53, 69, 0.22);  --bord: #dc3545; }
+.etat-urgent { --fond: rgba(255, 112, 0, 0.20);  --bord: #ff7000; }
+.etat-proche { --fond: rgba(255, 205, 0, 0.18);  --bord: #ffcd00; }
+.etat-ok     { --fond: rgba(40, 167, 69, 0.12);  --bord: #28a745; }
+
+.entete { display: flex; align-items: flex-start; gap: 0.6rem; }
+.titre { flex: 1; min-width: 0; }
+.titre strong { display: block; line-height: 1.25; }
+.titre small { display: block; color: var(--pico-muted-color); }
+.titre .echeance { font-weight: 600; }
+
+.vignette {
+  width: 48px; height: 48px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: var(--pico-card-background-color);
+}
+
+.vignette-grande {
+  max-width: 120px;
+  display: block;
+  margin-bottom: 1rem;
+  border-radius: 8px;
+}
+
+/* Croix de suppression : petite à l'œil, large au doigt. */
+.supprimer {
+  width: 2.75rem; height: 2.75rem;
+  padding: 0; margin: 0;
+  flex: none;
+  line-height: 1;
+}
+
+/* La date sur la carte : compacte, mais tapable. */
+.produit input[type="date"] {
+  margin: 0.5rem 0 0.25rem;
+  height: 2.75rem;
+  padding-block: 0;
+  font-size: 0.95rem;
+}
+
+/* --- Curseur de niveau ----------------------------------------------------- */
+
+.niveau { display: flex; align-items: center; gap: 0.75rem; }
+
+.niveau input[type="range"] {
+  flex: 1;
+  margin: 0;
+  height: 2.5rem;   /* zone tactile confortable */
+}
+
+.niveau output {
+  min-width: 3.5rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* --- Scan ------------------------------------------------------------------ */
+
+#lecteur {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto 1rem;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #000;
+}
+#lecteur video { width: 100% !important; height: auto !important; display: block; }
+
+.message { color: var(--pico-muted-color); }
+
+/* --- Formulaire ------------------------------------------------------------ */
+
+.raccourcis {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0.75rem 0 1.25rem;
+}
+.raccourcis button {
+  flex: 1;
+  margin: 0;
+  padding: 0.6rem 0.2rem;
+  font-size: 0.85rem;
+  min-height: 2.75rem;
+}
+
+.deux-boutons { display: flex; gap: 0.6rem; }
+.deux-boutons button { flex: 1; margin: 0; min-height: 3rem; }
+
+/* Champs de saisie : au moins 16px, sinon iOS/Android zoome à la mise au point. */
+input, select, textarea { font-size: 1rem; }
+
+.sauvegarde { margin-top: 2rem; }
+
+/* --- Barre d'action fixe --------------------------------------------------- */
+
+.barre-bas {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 10;
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.6rem 0.75rem calc(0.6rem + env(safe-area-inset-bottom));
+  background: var(--pico-background-color);
+  border-top: 1px solid var(--pico-muted-border-color);
+}
+.barre-bas button {
+  flex: 1;
+  margin: 0;
+  min-height: 3.4rem;
+  font-size: 1.05rem;
+}
